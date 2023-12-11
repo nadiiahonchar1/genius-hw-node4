@@ -1,7 +1,9 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const sqlite3 = require("sqlite3").verbose();
+
 // const { v4: uuidv4 } = require("uuid");
+const Task = require("./models/taskModel");
 
 const app = express();
 const dbName = "tasks.db";
@@ -33,9 +35,9 @@ let tasks = [
 
 app.use(bodyParser.json());
 
-const checkExist = (task, res) => {
+const checkExist = (task, res, err) => {
   if (!task) {
-    return res.status(404).json({ message: "Not found" });
+    return res.status(404).json({ message: err ?? "Not found" });
   }
 };
 
@@ -49,79 +51,70 @@ app.get("/", (req, res) => {
   return res.send("Hello, Express!");
 });
 
-app.get("/tasks", (req, res) => {
-  db.all("SELECT * FROM tasks", (err, rows) => {
-    serverError(err, res);
-    return res.status(200).json(rows);
-  });
-});
-
-// app.post("/tasks", (req, res) => {
-//   const newTask = req.body;
-// tasks.push(newTask);
-//   db.run("INSERT INTO tasks (text) VALUE (?)", [newTask.text], (err) => {
-//     serverError(err, res);
-//     return res.status(201).json({ id: this.lastID });
-//   });
-// });
-app.post("/tasks", (req, res) => {
-  const newTask = req.body;
-  const taskId = Math.floor(Math.random() * 1001);
-
-  if (!newTask || !newTask.text) {
-    return res.status(400).json({ message: "Invalid task data" });
+app.get("/tasks", async (req, res) => {
+  try {
+    const tasks = await Task.find();
+    return res.status(200).json(tasks);
+  } catch (e) {
+    console.error("Task creation error: ", e);
+    serverError(e, res);
   }
-
-  const task = {
-    id: taskId,
-    text: newTask.text,
-  };
-
-  tasks.push(task);
-
-  db.run(
-    "INSERT INTO tasks (id, text) VALUES (?, ?)",
-    [taskId, newTask.text],
-    (err) => {
-      serverError(err, res);
-      return res.status(201).json(task);
-    }
-  );
 });
 
-app.get("/tasks/:id", (req, res) => {
-  const taskId = parseInt(req.params.id);
-  // const foundTask = tasks.find((task) => task.id === taskId);
-
-  db.get("SELECT * FROM tasks WHERE id = ?", taskId, (err, row) => {
-    serverError(err, res);
-    checkExist(row, res);
-    return res.status(200).json(row);
-  });
+app.post("/tasks", async (req, res) => {
+  try {
+    const newTask = req.body;
+    const task = await Task.create({
+      text: newTask.text,
+    });
+    checkExist(task, res, "Task not created");
+    return res.status(201).json(task);
+  } catch (e) {
+    console.error("Task creation error: ", e);
+    serverError(e, res);
+  }
 });
 
-app.put("/tasks/:id", (req, res) => {
-  const { text } = req.body;
-  const taskId = parseInt(req.params.id);
-  // const foundTask = tasks.find((task) => task.id === taskId);
-
-  // checkExist(foundTask, res);
-
-  db.run("UPDATE tasks SET text = ? WHERE id = ?", [text, taskId], (err) => {
-    serverError(err, res);
-    return res.status(200).json({ id: taskId, text });
-  });
-
-  // foundTask.text = updatedTask.text;
+app.get("/tasks/:id", async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const task = await Task.findById(taskId);
+    checkExist(task, res);
+    return res.status(200).json(task);
+  } catch (e) {
+    console.error("Task creation error: ", e);
+    serverError(e, res);
+  }
 });
 
-app.delete("/tasks/:id", (req, res) => {
-  const taskId = parseInt(req.params.id);
-  // tasks = tasks.filter((task) => task.id !== taskId);
-  db.run("DELETE from tasks WHERE id = ?", taskId, (err) => {
-    serverError(err, res);
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const { text, isCompleted } = req.body;
+    const taskId = parseInt(req.params.id);
+    const task = await Task.findByIdAndUpdate(
+      taskId,
+      { text, isCompleted },
+      { new: true }
+    );
+    checkExist(task, res);
+    return res.status(200).json(task);
+  } catch (e) {
+    console.error("Task creation error: ", e);
+    serverError(e, res);
+  }
+});
+
+app.delete("/tasks/:id", async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const task = await Task.findByIdAndDelete(taskId);
+    checkExist(task, res);
+
     return res.status(204).send();
-  });
+  } catch (e) {
+    console.error("Task creation error: ", e);
+    serverError(e, res);
+  }
 });
 
 app.listen(port, () => {
